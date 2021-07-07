@@ -23,6 +23,7 @@ describe("MultiSigWallet.sol: Unit Tests", function () {
     expect(owners.length).to.be.equal(2, "Invalid number of owners.");
   });
 
+  //Some comment
   it("Tranfer 50 ETH to wallet.", async () => {
     // transfer eth to wallet
     const result = await xpj.sendTransaction({
