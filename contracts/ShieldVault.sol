@@ -8,7 +8,7 @@ import "./OpenZeppelin/contracts/token/ERC20/IERC20.sol";
 import "./OpenZeppelin/contracts/utils/Address.sol";
 
 contract ShieldVault {
-  using Address for address;
+    using Address for address;
     event Deposit(address indexed sender, uint256 amount, uint256 balance);
     event TokenDeposit(address indexed sender, uint256 amount, uint256 balance);
     event SubmitTransaction(
@@ -73,18 +73,13 @@ contract ShieldVault {
         _;
     }
 
-    constructor() {}
+    constructor() {
+        /*empty constructor*/
+    }
 
-    /*
-    Exercise
-    1. Validate that the _owner is not empty
-    2. Validate that _numConfirmationsRequired is greater than 0
-    3. Validate that _numConfirmationsRequired is less than or equal to the number of _owners
-    4. Set the state variables owners from the input _owners.
-        - each owner should not be the zero address
-        - validate that the owners are unique using the isOwner mapping
-    5. Set the state variable numConfirmationsRequired from the input.
-    */
+    /**
+     * @dev Initialize state variables
+     */
     function initialize(
         address[] memory _owners,
         uint256 _numConfirmationsRequired,
@@ -92,13 +87,16 @@ contract ShieldVault {
         address _factory
     ) public {
         require(!initialized, "already initialized");
+        initialized = true;
+
         require(_owners.length > 0, "owners required");
         require(
             _numConfirmationsRequired > 0 &&
                 _numConfirmationsRequired <= _owners.length,
             "invalid number of required confirmations"
         );
-        require(address(_token) != address(0), "token zero address");
+        require(_token != address(0), "token zero address");
+        require(_factory != address(0), "factory zero address");
 
         for (uint256 i = 0; i < _owners.length; i++) {
             address owner = _owners[i];
@@ -112,18 +110,16 @@ contract ShieldVault {
 
         numConfirmationsRequired = _numConfirmationsRequired;
         token = IERC20(_token);
-        initialized = true;
         factory = _factory;
     }
 
-    /*
-    Exercise
-    1. Declare a payable fallback function
-        - it should emit the Deposit event with
-            - msg.sender
-            - msg.value
-            - current amount of ether in the contract (address(this).balance)
-    */
+    /**
+     * @dev Declare a payable fallback function
+     *     - it should emit the Deposit event with
+     *         - msg.sender
+     *         - msg.value
+     *         - current amount of ether in the contract (address(this).balance)
+     */
     fallback() external payable {
         emit Deposit(msg.sender, msg.value, address(this).balance);
     }
@@ -132,16 +128,12 @@ contract ShieldVault {
         emit Deposit(msg.sender, msg.value, address(this).balance);
     }
 
-    /* Exercise
-    1. Complete the onlyOwner modifier defined above.
-        - This modifier should require that msg.sender is an owner
-    2. Inside submitTransaction, create a new Transaction struct from the inputs
-       and append it the transactions array
-        - executed should be initialized to false
-        - numConfirmations should be initialized to 0
-    3. Emit the SubmitTransaction event
-        - txId should be the index of the newly created transaction
-    */
+    /**
+     * @dev Add transaction to queue.
+     * @param _to The destination address.
+     * @param _value The amount to be transfered.
+     * @param _data An abi encoded signature to be executed after executing the transfer. Only works with for non-token transfers.
+     */
     function submitTransaction(
         address _to,
         uint256 _value,
@@ -150,20 +142,10 @@ contract ShieldVault {
         createTransaction(_to, _value, _data, false);
     }
 
-    /* Exercise
-    1. Complete the modifier txExists
-        - it should require that the transaction at txId exists
-    2. Complete the modifier notExecuted
-        - it should require that the transaction at txId is not yet executed
-    3. Complete the modifier notConfirmed
-        - it should require that the transaction at txId is not yet
-          confirmed by msg.sender
-    4. Ensure that the user that created the transaction is not trying to confirm it.
-    5. Confirm the transaction
-        - update the isConfirmed to true for msg.sender
-        - increment numConfirmation by 1
-        - emit ConfirmTransaction event for the transaction being confirmed
-    */
+    /**
+     * @dev Confirm the specified transaction.
+     * @param _txId The transaction id.
+     */
     function confirmTransaction(uint256 _txId)
         public
         onlyOwner
@@ -177,6 +159,7 @@ contract ShieldVault {
             msg.sender != transaction.by,
             "You cannot confirm this transaction."
         );
+        require(!transaction.isConfirmed[msg.sender], "tx already confirmed");
 
         transaction.isConfirmed[msg.sender] = true;
         transaction.numConfirmations += 1;
@@ -184,14 +167,10 @@ contract ShieldVault {
         emit ConfirmTransaction(msg.sender, _txId);
     }
 
-    /* Exercise
-    1. Execute the transaction
-        - it should require that number of confirmations >= numConfirmationsRequired
-        - set executed to true
-        - execute the transaction using the low level call method
-        - require that the transaction executed successfully
-        - emit ExecuteTransaction
-    */
+    /**
+     * @dev Execute the specified transaction.
+     * @param _txId The transaction id.
+     */
     function executeTransaction(uint256 _txId)
         public
         payable
@@ -205,29 +184,23 @@ contract ShieldVault {
             transaction.numConfirmations >= numConfirmationsRequired,
             "cannot execute tx"
         );
-        
+        require(!transaction.executed, "tx already executed");
+
         transaction.executed = true;
 
         bool success = false;
 
-        if(transaction.isTokenWithdrawal) {
-          success = token.transfer(transaction.to, transaction.value);
-          // bytes memory payload = abi.encodeWithSelector(token.transfer.selector, transaction.to, transaction.value);
-          // bytes memory returnedData = address(token).functionCall(payload, "low-level call failed");
-
-          // if(returnedData.length > 0) {
-          //   require(abi.decode(returnedData, (bool)), 'operation did not succeed');
-          // }
-          tokenBalance = token.balanceOf(address(this));
-        }
-        else {
-          require(
-            address(this).balance >= transaction.value,
-            "insufficient balance."
-          );
-          (success, ) = transaction.to.call{value: transaction.value}(
-              transaction.data
-          );
+        if (transaction.isTokenWithdrawal) { // token withdrawal
+            success = token.transfer(transaction.to, transaction.value);
+            tokenBalance = token.balanceOf(address(this));
+        } else { // eth withdrawal
+            require(
+                address(this).balance >= transaction.value,
+                "insufficient balance."
+            );
+            (success, ) = transaction.to.call{value: transaction.value}(
+                transaction.data
+            );
         }
 
         require(success, "tx failed");
@@ -235,17 +208,10 @@ contract ShieldVault {
         emit ExecuteTransaction(msg.sender, _txId);
     }
 
-    /* Exercise
-    1. Add appropriate modifiers
-        - only owner should be able to call this function
-        - transaction at _txId must exist
-        - transaction at _txId must be executed
-    2. Revoke the confirmation
-        - require that msg.sender has confirmed the transaction
-        - set isConfirmed to false for msg.sender
-        - decrement numConfirmations by 1
-        - emit RevokeConfirmation
-    */
+    /**
+     * @dev Revoke a confirmation in the specified transaction.
+     * @param _txId The transaction id.
+     */
     function revokeConfirmation(uint256 _txId)
         public
         onlyOwner
@@ -262,38 +228,75 @@ contract ShieldVault {
         emit RevokeConfirmation(msg.sender, _txId);
     }
 
+    /**
+     * @dev Deposit tokens from token's contract.
+     * @param amount The amount to be transfered.
+     */
     function deposit(uint256 amount) public {
-      require(token.transferFrom(msg.sender, address(this), amount), "tx failed");
-      tokenBalance = token.balanceOf(address(this));
-      emit TokenDeposit(msg.sender, amount, tokenBalance);
-    }
-    function requestTokenWithdrawal(address _to, uint256 _value) public onlyOwner {
-      bytes memory _data = bytes("");
-      createTransaction(_to, _value, _data, true);
+        require(token.transferFrom(msg.sender, address(this), amount), "tx failed");
+        tokenBalance = token.balanceOf(address(this));
+        emit TokenDeposit(msg.sender, amount, tokenBalance);
     }
 
-    function createTransaction(address _to, uint256 _value, bytes memory _data, bool _isTokenWithdrawal) private {
-      uint256 _txId = txId;
-      Transaction storage transaction = transactions[txId++];
-      transaction.by = msg.sender;
-      transaction.to = _to;
-      transaction.value = _value;
-      transaction.data = _data;
-      transaction.executed = false;
-      transaction.isTokenWithdrawal = _isTokenWithdrawal;
-      transaction.numConfirmations = 0;
-
-      emit SubmitTransaction(msg.sender, _txId, _to, _value, _data);
+    /**
+     * @dev Request a token withdrawal.
+     * @param _to The destination address.
+     * @param _value The amount to be transfered.
+     */
+    function requestTokenWithdrawal(address _to, uint256 _value)
+        public
+        onlyOwner
+    {
+        bytes memory _data = bytes("");
+        createTransaction(_to, _value, _data, true);
     }
 
+    /**
+     * @dev Create a transaction.
+     * @param _to The destination address.
+     * @param _value The amount to be transfered.
+     * @param _data An abi encoded signature to be executed after executing the transfer. Only works with for non-token transfers.
+     * @param _isTokenWithdrawal Specifies if this is a token transaction.
+     */
+    function createTransaction(
+        address _to,
+        uint256 _value,
+        bytes memory _data,
+        bool _isTokenWithdrawal
+    ) private {
+        uint256 _txId = txId;
+        Transaction storage transaction = transactions[txId++];
+        transaction.by = msg.sender;
+        transaction.to = _to;
+        transaction.value = _value;
+        transaction.data = _data;
+        transaction.executed = false;
+        transaction.isTokenWithdrawal = _isTokenWithdrawal;
+        transaction.numConfirmations = 0;
+
+        emit SubmitTransaction(msg.sender, _txId, _to, _value, _data);
+    }
+
+    /**
+     * @dev Get the owners of this vault
+     * @return An array of addresses.
+     */
     function getOwners() public view returns (address[] memory) {
         return owners;
     }
 
+    /**
+     * @dev Get the number of transactions
+     * @return An numeric value;
+     */
     function getTransactionCount() public view returns (uint256) {
         return txId;
     }
 
+    /**
+     * @dev Get specified transaction information.
+     * @param _txId the transaction id.
+     */
     function getTransaction(uint256 _txId)
         public
         view
@@ -316,6 +319,11 @@ contract ShieldVault {
         );
     }
 
+    /**
+     * @dev Verify if the specified owner has confirmed the specified transaction.
+     * @param _txId The transaction id.
+     * @param _owner The owner address.
+     */
     function isConfirmed(uint256 _txId, address _owner)
         public
         view
@@ -326,10 +334,18 @@ contract ShieldVault {
         return transaction.isConfirmed[_owner];
     }
 
+    /**
+     * @dev Get this contract's balance (ETH).
+     * @return The balance of this contract (ETH).
+     */
     function getBalance() public view returns (uint256) {
         return address(this).balance;
     }
 
+    /**
+     * @dev Get this contract's token balance.
+     * @return This contract's token balance.
+     */
     function getTokenBalance() public view returns (uint256) {
         return token.balanceOf(address(this));
     }
