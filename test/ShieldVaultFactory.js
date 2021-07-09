@@ -112,7 +112,7 @@ describe("ShieldVaultFactory.sol: Unit Tests", function () {
     proxyClone = await ShieldVault.attach(proxy);
 
     // submit transaction as p1
-    expect(await proxyClone.connect(p1).requestTokenWithdrawal(p1.address, BigNumber.from(web3.toWei("500"))))
+    expect(await proxyClone.connect(p1).requestTokenWithdrawal(p1.address, BigNumber.from(web3.toWei("500")), "tx description"))
       .to.emit(proxyClone, "SubmitTransaction");
 
     // try to execute transaction without confirmations

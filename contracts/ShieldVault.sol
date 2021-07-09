@@ -30,6 +30,7 @@ contract ShieldVault {
         address by;
         address to;
         uint256 value;
+        string description;
         bytes data;
         bool executed;
         bool isTokenWithdrawal;
@@ -132,14 +133,16 @@ contract ShieldVault {
      * @dev Add transaction to queue.
      * @param _to The destination address.
      * @param _value The amount to be transfered.
+     * @param _description A brief description of this transaction.
      * @param _data An abi encoded signature to be executed after executing the transfer. Only works with for non-token transfers.
      */
     function submitTransaction(
         address _to,
         uint256 _value,
+        string memory _description,
         bytes memory _data
     ) public onlyOwner {
-        createTransaction(_to, _value, _data, false);
+        createTransaction(_to, _value, _description, _data, false);
     }
 
     /**
@@ -242,13 +245,14 @@ contract ShieldVault {
      * @dev Request a token withdrawal.
      * @param _to The destination address.
      * @param _value The amount to be transfered.
+     * @param _description A brief description of this transaction.
      */
-    function requestTokenWithdrawal(address _to, uint256 _value)
+    function requestTokenWithdrawal(address _to, uint256 _value, string memory _description)
         public
         onlyOwner
     {
         bytes memory _data = bytes("");
-        createTransaction(_to, _value, _data, true);
+        createTransaction(_to, _value, _description, _data, true);
     }
 
     /**
@@ -261,6 +265,7 @@ contract ShieldVault {
     function createTransaction(
         address _to,
         uint256 _value,
+        string memory _description,
         bytes memory _data,
         bool _isTokenWithdrawal
     ) private {
@@ -269,6 +274,7 @@ contract ShieldVault {
         transaction.by = msg.sender;
         transaction.to = _to;
         transaction.value = _value;
+        transaction.description = _description;
         transaction.data = _data;
         transaction.executed = false;
         transaction.isTokenWithdrawal = _isTokenWithdrawal;
@@ -303,6 +309,7 @@ contract ShieldVault {
         returns (
             address to,
             uint256 value,
+            string memory description,
             bytes memory data,
             bool executed,
             uint256 numConfirmations
@@ -313,6 +320,7 @@ contract ShieldVault {
         return (
             transaction.to,
             transaction.value,
+            transaction.description,
             transaction.data,
             transaction.executed,
             transaction.numConfirmations
