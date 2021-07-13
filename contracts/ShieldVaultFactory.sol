@@ -17,7 +17,7 @@ contract ShieldVaultFactory is ProxyFactory {
   address private owner;
 
   modifier onlyOwner() {
-    require(msg.sender == owner, "now owner");
+    require(msg.sender == owner, "not owner");
     _;
   }
 
