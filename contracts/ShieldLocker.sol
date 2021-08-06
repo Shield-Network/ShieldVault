@@ -145,7 +145,7 @@ contract ShieldLocker is Context {
    *
    * Requirements
    * 
-   * - Block timestamp should be grated than specified vesting period.
+   * - Block timestamp should be greater than specified vesting period.
    * - Specified vesting period should not be flagged as withdrawn.
    * - _msgSender() should return the address of the pool owner.
    * - Pool's balance should be greater than zero.
@@ -182,7 +182,7 @@ contract ShieldLocker is Context {
    *
    * Requirements
    * 
-   * - Block timestamp should be grated than last vesting period.
+   * - Block timestamp should be greater than last vesting period.
    * - Last vesting period should not be flagged as withdrawn.
    * - _msgSender() should return the address of the pool owner.
    * - Pool's balance should be greater than zero.
