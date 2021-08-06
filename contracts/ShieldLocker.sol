@@ -198,14 +198,15 @@ contract ShieldLocker is Context {
     return userPools[user];
   }
 
-  function getPoolVestingSchedule(uint256 pId) public view returns(uint256[] memory) {
-    return pools[pId].vestingSchedule;
-  }
-  function isVestingPeriodWithdrawn(uint256 pId, uint256 vestingPeriodId) public view returns(bool) {
-    return pools[pId].withdrawn[vestingPeriodId];
-  }
-  function getVestingPeriodWithdrawalTime(uint256 pId, uint256 vestingPeriodId) public view returns(uint256) {
-    return pools[pId].withdrawalTimes[vestingPeriodId];
+  function getVestingScheduleDetails(uint256 pId) public view 
+  returns(
+    uint256[] memory vestingSchedule, 
+    bool[] memory withdrawn, 
+    uint256[] memory withdrawalTimes
+  ) {
+    vestingSchedule = pools[pId].vestingSchedule;
+    withdrawn = pools[pId].withdrawn;
+    withdrawalTimes = pools[pId].withdrawalTimes;
   }
 
   function allowToExecuteWithdraw(uint256 pId, uint256 vestingPeriodId) public onlyOwner {

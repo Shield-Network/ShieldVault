@@ -57,9 +57,9 @@ describe("ShiedLocker.sol: Unit Tests", function () {
     .to.be.revertedWith("ShieldLocker: vesting period has not expired.");
   });
   it("Should allow to withdraw.", async () => {
-    var { token, lockType, unlockTime, amount } = await locker.pools(0);
+    var { amount } = await locker.pools(0);
 
-    var vestingSchedule = await locker.getPoolVestingSchedule(0);
+    var { vestingSchedule } = await locker.getVestingScheduleDetails(0);
 
     // withdraw 1
     await locker.allowToExecuteWithdraw(0, 0);
@@ -96,7 +96,8 @@ describe("ShiedLocker.sol: Unit Tests", function () {
   it("Should not allow withdraw if already withdrawn.", async () => {
     await expect(locker.connect(user1).withdraw(0, 1))
     .to.be.revertedWith("ShiedLocker: vesting period already done.");
-    expect(await locker.isVestingPeriodWithdrawn(0, 1)).to.be.equal(true, "ShieldLocker: invalid flag.");
+    var { withdrawn } = await locker.getVestingScheduleDetails(0);
+    expect(withdrawn[1]).to.be.equal(true, "ShieldLocker: invalid flag.");
   });
   it("Should not allow withdraw all.", async () => {
     await expect(locker.connect(user1).withdrawAll(0))
