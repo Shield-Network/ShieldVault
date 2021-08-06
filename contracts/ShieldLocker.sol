@@ -97,7 +97,7 @@ contract ShieldLocker is Context {
     : lockType == LockType.VESTING20 ? 20
     : lockType == LockType.VESTING25 ? 25
     : lockType == LockType.VESTING50 ? 50
-    : lockType == LockType.VESTING100 ? 100 : 0;
+    : lockType == LockType.VESTING100 ? 100 : 1;
   }
 
   /**
@@ -192,6 +192,24 @@ contract ShieldLocker is Context {
     pools[pId].token.transfer(_msgSender(), amountToBeTransfered);
 
     emit Withdraw(_msgSender(), pId, amountToBeTransfered, pools[pId].withdrawalTimes[pools[pId].withdrawalTimes.length - 1]);
+  }
+
+  function fetchPage(uint256 pageIndex, uint256 pageSize) public view returns(uint256[] memory) {
+    if(pageSize > pools.length)
+      pageSize = pool.length;
+
+    uint256[] items = new uint256[](pageSize);
+    uint256 totalPages = pools.length / pageSize;
+    if(pageIndex > totalPages) {
+      pageIndex = totalPages;
+    }
+
+    uint256 startIndex = pageIndex * pageSize;
+    for(uint pId = startIndex; pId < startIndex + pageSize && pId < pools.length; pId++) {
+      items[pId] = pId;
+    }
+
+    return items;
   }
 
   function getUserPools(address user) public view returns(uint256[] memory) {
