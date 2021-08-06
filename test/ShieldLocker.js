@@ -41,7 +41,7 @@ describe("ShiedLocker.sol: Unit Tests", function () {
     .to.emit(locker, "PoolAdded");
   });
   it("Get pool info.", async () => {
-    var [token, lockType, unlockTime, amount, vestingPeriods, withdrawn] = await locker.getPoolInfo(0);
+    var { token, lockType, unlockTime, amount } = await locker.pools(0);
 
     // vestingPeriods.forEach((period, index) => {
     //   console.log("Period", index, "Date", new Date(period * 1000));
@@ -57,7 +57,9 @@ describe("ShiedLocker.sol: Unit Tests", function () {
     .to.be.revertedWith("ShieldLocker: vesting period has not expired.");
   });
   it("Should allow to withdraw.", async () => {
-    var [token, lockType, unlockTime, amount, vestingPeriods, withdrawn] = await locker.getPoolInfo(0);
+    var { token, lockType, unlockTime, amount } = await locker.pools(0);
+
+    var vestingSchedule = await locker.getPoolVestingSchedule(0);
 
     // withdraw 1
     await locker.allowToExecuteWithdraw(0, 0);
@@ -65,7 +67,7 @@ describe("ShiedLocker.sol: Unit Tests", function () {
     .to.emit(locker, "Withdraw");
 
     var balance = await _token.balanceOf(user1.address);
-    var expectedBalance = Math.floor(amount / vestingPeriods.length);
+    var expectedBalance = Math.floor(amount / vestingSchedule.length);
 
     expect(balance).to.be.equal(expectedBalance, "1: Wrong user1 balance.");
 
@@ -75,7 +77,7 @@ describe("ShiedLocker.sol: Unit Tests", function () {
     .to.emit(locker, "Withdraw");
 
     balance = await _token.balanceOf(user1.address);
-    expectedBalance = Math.floor(amount / vestingPeriods.length) * 2;
+    expectedBalance = Math.floor(amount / vestingSchedule.length) * 2;
 
     expect(balance).to.be.equal(expectedBalance, "2: Wrong user1 balance.");
 
@@ -94,9 +96,15 @@ describe("ShiedLocker.sol: Unit Tests", function () {
   it("Should not allow withdraw if already withdrawn.", async () => {
     await expect(locker.connect(user1).withdraw(0, 1))
     .to.be.revertedWith("ShiedLocker: vesting period already done.");
+    expect(await locker.isVestingPeriodWithdrawn(0, 1)).to.be.equal(true, "ShieldLocker: invalid flag.");
   });
   it("Should not allow withdraw all.", async () => {
     await expect(locker.connect(user1).withdrawAll(0))
     .to.be.revertedWith("ShiedLocker: vesting period already done.");
   });
+  it("User pools", async () => {
+    var pools = await locker.getUserPools(user1.address);
+    expect(pools.length).to.be.equal(1, "Shieldlocker: invalid pool length.");
+    expect(pools[0]).to.be.equal(0, "ShieldLocker: wrong pool found.");
+  })
 });

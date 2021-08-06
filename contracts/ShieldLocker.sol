@@ -28,13 +28,15 @@ contract ShieldLocker is Context {
     uint256 unlockTime;
     uint256 amount;
     uint256 originalAmount;
-    uint256[] vestingPeriods;
+    uint256[] vestingSchedule;
     bool[] withdrawn;
     uint256[] withdrawalTimes;
     address owner;
   }
-  uint256 _pId = 0;
-  mapping(uint256 => PoolInfo) _pools;
+  uint256 private _pId = 0;
+  PoolInfo[] public pools;
+
+  mapping(address => uint256[]) private userPools;
   
   event PoolAdded(uint256 pId, address token, LockType lockType, uint256 unlockTime);
   event Withdraw(address sender, uint256 pId, uint256 amount, uint256 timestamp);
@@ -59,14 +61,15 @@ contract ShieldLocker is Context {
     uint256 pId = _pId++;
     uint256 n = getNumberOfVestingPeriods(lockType);
 
-    _pools[pId] = PoolInfo(
+    userPools[_msgSender()].push(pId);
+    pools.push(PoolInfo(
       token,
       lockType, 
       lockTime, 
       unlockTime, 
       amount,
       amount,
-      generateVestingPeriods(
+      generateVestingSchedule(
         lockTime, 
         unlockTime, 
         lockType
@@ -74,31 +77,12 @@ contract ShieldLocker is Context {
       new bool[](n),
       new uint256[](n),
       _msgSender()
-    );
+    ));
 
     // transfer amount -- must be pre-approved by user
     token.transferFrom(_msgSender(), address(this), amount);
 
     emit PoolAdded(pId, address(token), lockType, unlockTime);
-  }
-
-  function getPoolInfo(uint256 pId) public view 
-    returns(
-      address token, 
-      LockType lockType, 
-      uint256 unlockTime, 
-      uint256 amount, 
-      uint256[] memory vestingPeriods,
-      bool[] memory withdrawn, 
-      uint256[] memory withdrawalTimes) {
-    PoolInfo memory pool = _pools[pId];
-    token = address(pool.token);
-    lockType = pool.lockType;
-    unlockTime = pool.unlockTime;
-    amount = pool.amount;
-    vestingPeriods = pool.vestingPeriods;
-    withdrawn = pool.withdrawn;
-    withdrawalTimes = pool.withdrawalTimes;
   }
 
   /**
@@ -120,9 +104,9 @@ contract ShieldLocker is Context {
    * @dev Generate vesting periods.
    * @return A uint256 array of timestamps representing the vesting periods.
    */
-  function generateVestingPeriods(uint256 lockTime, uint256 unlockTime, LockType lockType) private pure returns(uint256[] memory) {
+  function generateVestingSchedule(uint256 lockTime, uint256 unlockTime, LockType lockType) private pure returns(uint256[] memory) {
     uint256 n = getNumberOfVestingPeriods(lockType);
-    uint256[] memory vestingPeriods = new uint256[](n);
+    uint256[] memory vestingSchedule = new uint256[](n);
     uint256 timeLeft = unlockTime - lockTime;
     uint256 period = timeLeft / n;
 
@@ -134,10 +118,10 @@ contract ShieldLocker is Context {
 
     uint256 index = 0;
     do {
-      vestingPeriods[index] = lockTime + period * (index + 1);
+      vestingSchedule[index] = lockTime + period * (index + 1);
     } while(++index < n);
 
-    return vestingPeriods;
+    return vestingSchedule;
   }
 
   /**
@@ -151,30 +135,30 @@ contract ShieldLocker is Context {
    * - Pool's balance should be greater than zero.
    */
   function withdraw(uint256 pId, uint256 vestingPeriodId) public {
-    require(block.timestamp > _pools[pId].vestingPeriods[vestingPeriodId], "ShieldLocker: vesting period has not expired.");
-    require(!_pools[pId].withdrawn[vestingPeriodId], "ShiedLocker: vesting period already done.");
-    require(_msgSender() == _pools[pId].owner, "ShieldLocker: you are not the owner of this pool.");
-    require(_pools[pId].amount > 0, "ShieldLocker: insufficient balance.");
+    require(block.timestamp > pools[pId].vestingSchedule[vestingPeriodId], "ShieldLocker: vesting period has not expired.");
+    require(!pools[pId].withdrawn[vestingPeriodId], "ShiedLocker: vesting period already done.");
+    require(_msgSender() == pools[pId].owner, "ShieldLocker: you are not the owner of this pool.");
+    require(pools[pId].amount > 0, "ShieldLocker: insufficient balance.");
     
     // flag as withdrawn
-    _pools[pId].withdrawn[vestingPeriodId] = true;
+    pools[pId].withdrawn[vestingPeriodId] = true;
     // set withdrawal timestamp
-    _pools[pId].withdrawalTimes[vestingPeriodId] = block.timestamp;
+    pools[pId].withdrawalTimes[vestingPeriodId] = block.timestamp;
 
     // determine how much should be transfered
     uint256 amountToBeTransfered = 0;
-    if(vestingPeriodId == _pools[pId].vestingPeriods.length - 1)
-      amountToBeTransfered = _pools[pId].amount;
+    if(vestingPeriodId == pools[pId].vestingSchedule.length - 1)
+      amountToBeTransfered = pools[pId].amount;
     else
-      amountToBeTransfered = _pools[pId].originalAmount / _pools[pId].vestingPeriods.length;
+      amountToBeTransfered = pools[pId].originalAmount / pools[pId].vestingSchedule.length;
     
     // update pool amount
-    _pools[pId].amount -= amountToBeTransfered;
+    pools[pId].amount -= amountToBeTransfered;
     
     // transfer funds
-    _pools[pId].token.transfer(_msgSender(), amountToBeTransfered);
+    pools[pId].token.transfer(_msgSender(), amountToBeTransfered);
 
-    emit Withdraw(_msgSender(), pId, amountToBeTransfered, _pools[pId].withdrawalTimes[vestingPeriodId]);
+    emit Withdraw(_msgSender(), pId, amountToBeTransfered, pools[pId].withdrawalTimes[vestingPeriodId]);
   }
 
   /**
@@ -188,35 +172,49 @@ contract ShieldLocker is Context {
    * - Pool's balance should be greater than zero.
    */
   function withdrawAll(uint256 pId) public {
-    require(block.timestamp > _pools[pId].vestingPeriods[_pools[pId].vestingPeriods.length - 1], "ShieldLocker: vesting period has not expired.");
-    require(!_pools[pId].withdrawn[_pools[pId].withdrawn.length - 1], "ShiedLocker: vesting period already done.");
-    require(_msgSender() == _pools[pId].owner, "ShieldLocker: you are not the owner of this pool.");
-    require(_pools[pId].amount > 0, "ShieldLocker: insufficient balance.");
+    require(block.timestamp > pools[pId].vestingSchedule[pools[pId].vestingSchedule.length - 1], "ShieldLocker: vesting period has not expired.");
+    require(!pools[pId].withdrawn[pools[pId].withdrawn.length - 1], "ShiedLocker: vesting period already done.");
+    require(_msgSender() == pools[pId].owner, "ShieldLocker: you are not the owner of this pool.");
+    require(pools[pId].amount > 0, "ShieldLocker: insufficient balance.");
 
     // flag as widthdrawn
-    _pools[pId].withdrawn[_pools[pId].withdrawn.length - 1] = true;
+    pools[pId].withdrawn[pools[pId].withdrawn.length - 1] = true;
     // set widthdrawal timestamp
-    _pools[pId].withdrawalTimes[_pools[pId].withdrawalTimes.length - 1] = block.timestamp;
+    pools[pId].withdrawalTimes[pools[pId].withdrawalTimes.length - 1] = block.timestamp;
 
     // determine how much should be transfered
-    uint256 amountToBeTransfered = _pools[pId].amount;
+    uint256 amountToBeTransfered = pools[pId].amount;
     
     // update pool amount
-    _pools[pId].amount = 0;
+    pools[pId].amount = 0;
 
     // transfer funds
-    _pools[pId].token.transfer(_msgSender(), amountToBeTransfered);
+    pools[pId].token.transfer(_msgSender(), amountToBeTransfered);
 
-    emit Withdraw(_msgSender(), pId, amountToBeTransfered, _pools[pId].withdrawalTimes[_pools[pId].withdrawalTimes.length - 1]);
+    emit Withdraw(_msgSender(), pId, amountToBeTransfered, pools[pId].withdrawalTimes[pools[pId].withdrawalTimes.length - 1]);
+  }
+
+  function getUserPools(address user) public view returns(uint256[] memory) {
+    return userPools[user];
+  }
+
+  function getPoolVestingSchedule(uint256 pId) public view returns(uint256[] memory) {
+    return pools[pId].vestingSchedule;
+  }
+  function isVestingPeriodWithdrawn(uint256 pId, uint256 vestingPeriodId) public view returns(bool) {
+    return pools[pId].withdrawn[vestingPeriodId];
+  }
+  function getVestingPeriodWithdrawalTime(uint256 pId, uint256 vestingPeriodId) public view returns(uint256) {
+    return pools[pId].withdrawalTimes[vestingPeriodId];
   }
 
   function allowToExecuteWithdraw(uint256 pId, uint256 vestingPeriodId) public onlyOwner {
-    _pools[pId].vestingPeriods[vestingPeriodId] = block.timestamp-1;
+    pools[pId].vestingSchedule[vestingPeriodId] = block.timestamp-1;
   }
 
   
   function allowToExecuteWithdrawAll(uint256 pId) public onlyOwner {
-    _pools[pId].vestingPeriods[_pools[pId].vestingPeriods.length - 1] = block.timestamp-1;
+    pools[pId].vestingSchedule[pools[pId].vestingSchedule.length - 1] = block.timestamp-1;
   }
 
 }
