@@ -43,7 +43,7 @@ contract ShieldLocker_v2 is Context {
   
   event PoolAdded(uint256 pId, address token, VestingType vestingType, uint256 unlockTime);
   event Withdraw(address sender, uint256 pId, uint256 amount, uint256 timestamp);
-  event EmergencyWithdraw(address sender, uint256 pId, uint256 amount, uint256[] vestingPeriodIds);
+  event AdminWithdraw(address sender, uint256 pId, uint256 amount, uint256[] vestingPeriodIds);
 
   modifier onlyOwner() {
     require(_owner == _msgSender(), "ShieldLocker: caller is not the owner.");
@@ -231,6 +231,6 @@ contract ShieldLocker_v2 is Context {
     // transfer funds
     pools[pId].token.transfer(pools[pId].owner, amountToBeTransfered);
 
-    emit EmergencyWithdraw(_msgSender(), pId, amountToBeTransfered, vestingPeriodIds);
+    emit AdminWithdraw(_msgSender(), pId, amountToBeTransfered, vestingPeriodIds);
   }
 }
