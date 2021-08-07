@@ -43,6 +43,7 @@ contract ShieldLocker_v2 is Context {
   
   event PoolAdded(uint256 pId, address token, VestingType vestingType, uint256 unlockTime);
   event Withdraw(address sender, uint256 pId, uint256 amount, uint256 timestamp);
+  event EmergencyWithdraw(address sender, uint256 pId, uint256 amount, uint256[] vestingPeriodIds);
 
   modifier onlyOwner() {
     require(_owner == _msgSender(), "ShieldLocker: caller is not the owner.");
@@ -134,7 +135,7 @@ contract ShieldLocker_v2 is Context {
     else
       amountToBeTransfered = pools[pId].originalAmount / n;
     
-    // update pool amount
+    // update pool's amount
     pools[pId].amount -= amountToBeTransfered;
     
     // transfer funds
@@ -172,7 +173,7 @@ contract ShieldLocker_v2 is Context {
     // determine how much should be transfered
     uint256 amountToBeTransfered = pools[pId].amount;
     
-    // update pool amount
+    // update pool's amount
     pools[pId].amount = 0;
 
     // transfer funds
@@ -201,5 +202,35 @@ contract ShieldLocker_v2 is Context {
 
   function getUserPools(address user) public view returns(uint256[] memory) {
     return userPools[user];
+  }
+
+  /**
+   * @dev Allows admin to withdraw N vesting periods as requested by pool's owner.
+   * This function ignores pool's vesting schedule.
+   */
+  function adminWithdraw(uint256 pId, uint256[] memory vestingPeriodIds) public onlyOwner {
+    require(pId >= 0 && pId < pools.length, "ShieldLocker: invalid pool index.");
+    require(pools[pId].amount > 0, "ShieldLocker: insufficient balance.");
+
+    uint256 n = getNumberOfVestingPeriods(pools[pId].vestingType);
+
+    require(vestingPeriodIds.length > 0 && vestingPeriodIds.length <= n, "ShieldLocker: invalid number of vesting periods.");
+
+    for(uint56 i = 0; i < vestingPeriodIds.length; i++) {
+      require(!withdrawn[pId][vestingPeriodIds[i]], "ShieldLocker: vesting period already done.");
+      withdrawn[pId][vestingPeriodIds[i]] = true;
+      withdrawalTimes[pId][vestingPeriodIds[i]] = block.timestamp;
+    }
+    
+    // determine how much should be transfered
+    uint256 amountToBeTransfered = pools[pId].originalAmount / n * vestingPeriodIds.length;
+
+    // update pool's amount
+    pools[pId].amount -= amountToBeTransfered;
+
+    // transfer funds
+    pools[pId].token.transfer(pools[pId].owner, amountToBeTransfered);
+
+    emit EmergencyWithdraw(_msgSender(), pId, amountToBeTransfered, vestingPeriodIds);
   }
 }
